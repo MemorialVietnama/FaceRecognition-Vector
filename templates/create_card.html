@@ -1,0 +1,164 @@
+<!-- templates/create_card.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Создание карты</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <style>
+        .form-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        .auto-btn {
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            padding: 5px 10px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        .form-row {
+            display: flex;
+            gap: 10px;
+        }
+        .form-col {
+            flex: 1;
+        }
+        .nav-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <h1>Создание банковской карты для {{ client_fio }}</h1>
+        <form id="cardForm" method="POST">
+            <input type="hidden" name="client_fio" value="{{ client_fio }}">
+            
+            <div class="form-row">
+                <div class="form-col">
+                    <div class="form-group">
+                        <label for="card_number">Номер карты (16 цифр)</label>
+                        <div style="display: flex; align-items: center;">
+                            <input type="text" id="card_number" name="card_number" pattern="\d{16}" required>
+                            <button type="button" class="auto-btn" onclick="generateCardNumber()">АВТО</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-col">
+                    <div class="form-group">
+                        <label for="pin_code">Пин-код (4 цифры)</label>
+                        <input type="password" id="pin_code" name="pin_code" pattern="\d{4}" required>
+                    </div>
+                </div>
+                <div class="form-col">
+                    <div class="form-group">
+                        <label for="expiration_date">Срок действия</label>
+                        <input type="text" id="expiration_date" name="expiration_date" readonly>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-col">
+                    <div class="form-group">
+                        <label for="bank_id">Банк</label>
+                        <select id="bank_id" name="bank_id" required>
+                            <option value="">Выберите банк</option>
+                            {% for bank in banks %}
+                            <option value="{{ bank[0] }}">{{ bank[0] }}</option> <!-- bank[0] это SMALL_TITLE -->
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="form-col">
+                    <div class="form-group">
+                        <label for="card_type_id">Тип карты</label>
+                        <select id="card_type_id" name="card_type_id" required>
+                            {% for card_type in card_types %}
+                            <option value="{{ card_type[0] }}">{{ card_type[1] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-col">
+                    <div class="form-group">
+                        <label for="balance">Начальный баланс</label>
+                        <input type="number" id="balance" name="balance" value="0" min="0" step="0.01" required>
+                    </div>
+                </div>
+            </div>
+
+            <div class="nav-buttons">
+                <button type="button" onclick="window.history.back()">Назад</button>
+                <button type="submit">Создать карту</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        // Устанавливаем срок действия (текущая дата + 5 лет)
+        function setExpirationDate() {
+            const today = new Date();
+            const futureDate = new Date(today);
+            futureDate.setFullYear(futureDate.getFullYear() + 5);
+            
+            const month = String(futureDate.getMonth() + 1).padStart(2, '0');
+            const year = String(futureDate.getFullYear()).slice(2);
+            
+            document.getElementById('expiration_date').value = `${month}/${year}`;
+        }
+
+        // Генерация номера карты
+        function generateCardNumber() {
+            let cardNumber;
+            do {
+                cardNumber = '';
+                for (let i = 0; i < 16; i++) {
+                    cardNumber += Math.floor(Math.random() * 10);
+                }
+            } while (!checkCardNumberUnique(cardNumber));
+            
+            document.getElementById('card_number').value = cardNumber;
+        }
+
+        // Проверка уникальности номера карты (заглушка)
+        function checkCardNumberUnique(cardNumber) {
+            // В реальной реализации здесь должен быть AJAX-запрос к серверу
+            return true;
+        }
+
+        // Инициализация при загрузке страницы
+        document.addEventListener('DOMContentLoaded', function() {
+            setExpirationDate();
+        });
+    </script>
+</body>
+</html>

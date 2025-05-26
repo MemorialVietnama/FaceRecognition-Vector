@@ -1,0 +1,13 @@
+{% extends "index.html" %}
+
+{% block title %}Ошибка - EvilBank{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Произошла ошибка</h1>
+    <div class="alert alert-danger" role="alert">
+        {{ error }}
+    </div>
+    <p>Пожалуйста, вернитесь на <a href="{{ url_for('home') }}">главную страницу</a> или повторите попытку позже.</p>
+</div>
+{% endblock %}

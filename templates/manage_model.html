@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление моделью - EvilBank</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+        }
+        
+        .video-container {
+            position: relative;
+            width: 1280px;
+            height: 720px;
+        }
+        
+        #video {
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+        
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+        
+        #status {
+            position: absolute;
+            top: 10%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: #5a36ff;
+            z-index: 2;
+            font-family: Arial, sans-serif;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        #startButton {
+            position: absolute;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            font-size: 24px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 2;
+        }
+        
+        #startButton:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        #modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 3;
+        }
+        
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .modal-content button {
+            margin: 10px;
+            padding: 5px 15px;
+        }
+    </style>
+</head>
+<body>
+    <div id="status">Ожидание распознавания</div>
+    <div class="video-container">
+        <img id="video" src="{{ url_for('video_feed') }}" alt="Video Feed">
+        <canvas id="overlay"></canvas>
+    </div>
+    <canvas id="canvas" width="1280" height="720" style="display:none;"></canvas>
+    <button id="startButton">Распознать лицо</button>
+
+    <div id="modal">
+        <div class="modal-content">
+            <p id="modalText"></p>
+            <button id="yesButton">Да</button>
+            <button id="noButton">Нет</button>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const overlay = document.getElementById('overlay');
+        const context = canvas.getContext('2d');
+        const overlayContext = overlay.getContext('2d');
+        const startButton = document.getElementById('startButton');
+        const status = document.getElementById('status');
+
+        // Определение области
+        const detectionArea = { x: 400, y: 100, width: 480, height: 520 };
+
+        // Функция для рисования области определения
+        function drawDetectionArea() {
+            overlayContext.strokeStyle = 'green';
+            overlayContext.lineWidth = 2;
+            overlayContext.strokeRect(detectionArea.x, detectionArea.y, detectionArea.width, detectionArea.height);
+        }
+
+        // Функция для показа модального окна
+        function showModal(cardNumber) {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('modal');
+                const modalText = document.getElementById('modalText');
+                const yesButton = document.getElementById('yesButton');
+                const noButton = document.getElementById('noButton');
+
+                modalText.textContent = `Номер карты: ${cardNumber}\nЭто вы?`;
+                modal.style.display = 'block';
+
+                yesButton.onclick = () => {
+                    modal.style.display = 'none';
+                    resolve(true);
+                };
+
+                noButton.onclick = () => {
+                    modal.style.display = 'none';
+                    resolve(false);
+                };
+            });
+        }
+
+        async function recognizeFace() {
+            startButton.disabled = true;
+            status.textContent = 'Подготовьтесь, распознавание начнется через 3 секунды...';
+            overlayContext.clearRect(0, 0, overlay.width, overlay.height);
+            drawDetectionArea();
+
+            // Задержка 3 секунды
+            await new Promise(resolve => setTimeout(resolve, 3000));
+
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = canvas.toDataURL('image/jpeg');
+
+            try {
+                const response = await fetch('/recognize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageData })
+                });
+                const result = await response.json();
+
+                status.textContent = result.status;
+
+                overlayContext.clearRect(0, 0, overlay.width, overlay.height);
+                drawDetectionArea();
+                result.faces.forEach(face => {
+                    overlayContext.strokeStyle = 'blue';
+                    overlayContext.lineWidth = 2;
+                    overlayContext.strokeRect(face.x, face.y, face.width, face.height);
+                });
+
+                if (result.card_number) {
+                    const userResponse = await showModal(result.card_number);
+                    if (userResponse) {
+                        await fetch('/save_image', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ image: imageData, card_number: result.card_number })
+                        });
+                        status.textContent = 'Снимок сохранен';
+                    } else {
+                        status.textContent = 'Распознавание отменено';
+                    }
+                }
+
+            } catch (err) {
+                status.textContent = 'Ошибка: ' + err.message;
+            }
+            startButton.disabled = false;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            drawDetectionArea();
+            startButton.addEventListener('click', (event) => {
+                event.preventDefault();
+                recognizeFace();
+            });
+        });
+    </script>
+</body>
+</html>

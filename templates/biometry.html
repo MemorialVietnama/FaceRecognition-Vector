@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Добавление биометрии - EvilBank</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .preview-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .photo-card {
+            width: 200px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+        }
+        .photo-card img {
+            width: 100%;
+            height: auto;
+            border-radius: 3px;
+        }
+        .delete-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        #uploadProgress {
+            height: 25px;
+            margin-top: 20px;
+        }
+        .alert {
+            transition: opacity 0.3s;
+        }
+        #filePreview {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">EvilBank</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/dataset">Назад к датасету</a>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-4">
+        <h2>Добавление биометрических данных</h2>
+        <p class="lead">Номер карты: <strong>{{ card_number }}</strong></p>
+        <ul class="nav nav-tabs" id="biometryTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="file-tab" data-bs-toggle="tab" data-bs-target="#fileTab" type="button">
+                    Загрузка файлов
+                </button>
+            </li>
+        </ul>
+        <div class="tab-content mt-3" id="biometryTabsContent">
+            <!-- Вкладка загрузки файлов -->
+            <div class="tab-pane fade show active" id="fileTab" role="tabpanel">
+                <div class="card">
+                    <div class="card-body">
+                        <form id="uploadForm" enctype="multipart/form-data">
+                            <div class="mb-3">
+                                <label for="photoFiles" class="form-label">Выберите фотографии (JPG/PNG):</label>
+                                <input class="form-control" type="file" id="photoFiles" name="photos" multiple accept="image/jpeg, image/png">
+                            </div>
+                            <div class="mb-3">
+                                <div id="filePreview" class="preview-container"></div>
+                            </div>
+                            <button type="submit" class="btn btn-primary" id="uploadBtn">
+                                Загрузить выбранные фото
+                            </button>
+                        </form>
+                        <div class="progress d-none" id="uploadProgress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                        </div>
+                        <div id="uploadStatus" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Превью выбранных файлов
+        document.getElementById('photoFiles').addEventListener('change', function(e) {
+            const preview = document.getElementById('filePreview');
+            preview.innerHTML = '';
+            const maxSize = 5 * 1024 * 1024; // 5MB
+            for (let file of this.files) {
+                if (file.size > maxSize) {
+                    showStatus(`Файл ${file.name} слишком большой (максимум 5MB)`, 'danger');
+                    this.value = '';
+                    return;
+                }
+            }
+            Array.from(this.files).forEach(file => {
+                if (!file.type.match('image.*')) return;
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const card = document.createElement('div');
+                    card.className = 'photo-card';
+                    card.innerHTML = `
+                        <img src="${e.target.result}" class="img-thumbnail">
+                        <div class="delete-btn" onclick="this.parentElement.remove()">×</div>
+                    `;
+                    preview.appendChild(card);
+                };
+                reader.readAsDataURL(file);
+            });
+        });
+
+        // Обработка отправки формы
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const files = document.getElementById('photoFiles').files;
+            if (files.length === 0) {
+                showStatus('Пожалуйста, выберите фотографии', 'danger');
+                return;
+            }
+            const formData = new FormData();
+            formData.append('card_number', '{{ card_number }}');
+            for (let i = 0; i < files.length; i++) {
+                formData.append('photos', files[i]);
+            }
+            const uploadBtn = document.getElementById('uploadBtn');
+            uploadBtn.disabled = true;
+            const progress = document.getElementById('uploadProgress');
+            progress.classList.remove('d-none');
+            try {
+                const response = await fetch('/upload_photos', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showStatus(`Успешно загружено ${data.count} фотографий`, 'success');
+                    if (data.redirect) {
+                        setTimeout(() => {
+                            window.location.href = data.redirect;
+                        }, 1500);
+                    }
+                } else {
+                    showStatus(`Ошибка: ${data.message || 'Неизвестная ошибка'}`, 'danger');
+                }
+            } catch (error) {
+                showStatus(`Ошибка загрузки: ${error.message}`, 'danger');
+            } finally {
+                uploadBtn.disabled = false;
+                progress.classList.add('d-none');
+            }
+        });
+
+        // Вспомогательные функции
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('uploadStatus');
+            statusDiv.innerHTML = `
+                <div class="alert alert-${type} alert-dismissible fade show">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
